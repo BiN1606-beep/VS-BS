@@ -1,0 +1,554 @@
+/*
+    this time i know what im doing, trust
+*/
+
+#include <iostream>
+#include <cstdint>
+#include <cctype>
+#include <vector>
+#include <string_view>
+#include <unordered_set>
+#include <unordered_map>
+#include <cstring>
+#include <optional>
+#include <memory>
+#include <variant>
+
+
+
+constexpr auto WAIT_FOR_EXIT = 0;
+constexpr auto REQUIRE_SEMICOLON = 1;
+
+const char* TEXT =
+"var x: sint64 = 3;\n"
+"_print x + 5;"
+;
+
+
+
+/*
+    utils
+*/
+
+void CRASH_THE_FUCKING_PROGRAM() {
+    CRASH_THE_FUCKING_PROGRAM();
+}
+
+void doIndent(std::ostream& os, size_t indent) {
+    while (indent--)
+        os << "  ";
+}
+
+namespace BiN {
+
+    /*
+        straight from copilot
+    */
+
+    // UniqueVariant holds exactly one std::unique_ptr<T> for some T in Ts...
+    // Index 0 of the variant is std::monostate (empty), indices 1..N map to Ts...
+    template <class... Ts>
+    class UniqueVariant {
+        std::variant<std::monostate, std::unique_ptr<Ts>...> data;
+
+    public:
+        UniqueVariant() = default;
+        UniqueVariant(UniqueVariant&&) = default;
+        UniqueVariant& operator=(UniqueVariant&&) = default;
+        UniqueVariant(const UniqueVariant&) = delete;
+        UniqueVariant& operator=(const UniqueVariant&) = delete;
+
+        // set from a unique_ptr
+        template <class T>
+        void set(std::unique_ptr<T> p) {
+            static_assert((std::is_same_v<T, Ts> || ...), "T must be one of Ts...");
+            data = std::move(p);
+        }
+
+        // construct in-place
+        template <class T, class... Args>
+        T* emplace(Args&&... args) {
+            static_assert((std::is_same_v<T, Ts> || ...), "T must be one of Ts...");
+            data = std::make_unique<T>(std::forward<Args>(args)...);
+            return get<T>();
+        }
+
+        // assign from a temporary unique_ptr
+        template <class T>
+        UniqueVariant& operator=(std::unique_ptr<T> p) {
+            set<T>(std::move(p));
+            return *this;
+        }
+
+        // get raw pointer for the stored type T (or nullptr)
+        template <class T>
+        T* get() {
+            static_assert((std::is_same_v<T, Ts> || ...), "T must be one of Ts...");
+            if (auto ptr = std::get_if<std::unique_ptr<T>>(&data))
+                return ptr->get();
+            return nullptr;
+        }
+
+        // release the unique_ptr if it holds T, otherwise nullptr
+        template <class T>
+        std::unique_ptr<T> release() {
+            static_assert((std::is_same_v<T, Ts> || ...), "T must be one of Ts...");
+            if (auto ptr = std::get_if<std::unique_ptr<T>>(&data))
+                return std::move(*ptr);
+            return nullptr;
+        }
+
+        void reset() { data = std::monostate{}; }
+
+        // variant index: 0 == empty, 1..N correspond to Ts in order
+        size_t index() const noexcept { return data.index(); }
+    };
+
+
+
+    template<class T, class U>
+    class BaseStream {
+    public:
+        virtual T peek() = 0;
+        virtual T eat() = 0;
+
+        virtual U newCheckpoint() = 0;
+        virtual void gotoCheckpoint(U k) = 0;
+
+        virtual void reset() = 0;
+    };
+
+
+
+    template<class T>
+    class VectorStream : public BaseStream<T, size_t> {
+    private:
+        size_t pos = 0;
+
+    public:
+        std::vector<T> data{};
+
+        VectorStream(std::vector<T>&& v)
+            : data(std::move(v))
+        {
+        }
+
+        VectorStream() {}
+
+        virtual T peek() override {
+            if (pos < data.size())
+                return data[pos];
+
+            return T{};
+        }
+
+        virtual T eat() override {
+            if (pos < data.size())
+                return data[pos++];
+
+            return T{};
+        }
+
+        virtual size_t newCheckpoint() override {
+            return pos;
+        }
+
+        virtual void gotoCheckpoint(size_t k) override {
+            pos = k;
+        }
+
+        virtual void reset() override {
+            pos = 0;
+        }
+    };
+
+}
+
+
+
+/*
+    tokenizer
+*/
+
+namespace tokenizer {
+
+    enum class TokenKind {
+        eof,
+        identifier,
+        number,
+        symbol,
+        keyword
+    };
+
+    struct Token {
+        TokenKind kind = TokenKind::eof;
+        std::string_view value;
+        size_t line = 0;
+        size_t col = 0;
+    };
+
+    struct TokenStream : public BiN::VectorStream<Token> {
+        std::string_view source;
+
+    public:
+        TokenStream(std::string_view s, std::vector<Token>&& v)
+            : BiN::VectorStream<Token>(std::move(v)), source(s)
+        {
+        }
+
+        TokenStream() {};
+    };
+
+    class Tokenizer {
+    public:
+
+        std::unordered_set<std::string_view> compounds = {
+            "==",
+            "!=",
+            ">=",
+            "<=",
+            "=>",
+            "<-",
+            "->",
+            "::",
+            "..",
+
+            "...",
+            "===",
+            "<=>",
+            "<->",
+        };
+
+        std::unordered_set<std::string_view> keywords = {
+            "_print",
+
+            "break",
+            "case",
+
+            "auto",
+
+            "var",
+
+            "if",
+            "else",
+
+            "func",
+
+            "do",
+            "end",
+        };
+
+        bool isNum(const char c) { return '0' <= c && c <= '9'; }
+
+        bool isIdent(const char c) {
+            return
+                (c == '_')
+                || ('a' <= c && c <= 'z')
+                || ('A' <= c && c <= 'Z')
+                || isNum(c)
+                ;
+        }
+
+        bool isWS(const char c) { return std::isspace(static_cast<unsigned char>(c)); }
+
+        bool isCompound(std::string_view s) {
+            return compounds.find(s) != compounds.end();
+        }
+
+        bool isNumChar(const char c) {
+            return isIdent(c) || c == '.';
+        }
+
+        TokenStream tokenize(const char* str) {
+            std::vector<Token> r;
+
+            size_t index = 0;
+
+            size_t line = 0;
+            size_t col = 0;
+
+            auto peek = [&]()->char { return str[index]; };
+            auto eat = [&]()->char {
+                col++;
+                return str[index++];
+                };
+            auto eats = [&](size_t n = 0) {
+                for (size_t i = 0; i < n; i++)
+                    eat();
+                };
+
+            auto skipWS = [&]()->bool {
+                char c = peek();
+
+                while (isWS(c)) {
+                    eat();
+                    if (c == '\n') {
+                        line++;
+                        col = 1;
+                    }
+                    c = peek();
+                }
+
+                return peek() != '\0';
+                };
+
+            auto push = [&](TokenKind kind, std::string_view value) {
+                r.push_back({
+                    .kind = kind,
+                    .value = value,
+                    .line = line,
+                    .col = col
+                    });
+                };
+
+
+
+            while (skipWS()) {
+                char c = peek();
+
+                //TODO
+                //preparser instructions
+                if (c == '#')
+                {
+                    //TEMP
+                    eat();
+                }
+                //quoted identifiers
+                else if (c == '"')
+                {
+                    eat();
+
+                    size_t start = index;
+                    size_t i = start;
+                    size_t lines = 0;
+
+                    for (char c = str[i]; c != '"'; c = str[++i])
+                        if (c == '\n') lines++;
+                        else if (c == '\\') i++;
+
+                    push(
+                        TokenKind::identifier,
+                        { str + start, i - start }
+                    );
+
+                    line += lines;
+                    eats(i - start + 1);
+                }
+                //also quoted identifiers
+                else if (c == '\'')
+                {
+                    eat();
+
+                    size_t start = index;
+                    size_t i = start;
+                    size_t lines = 0;
+
+                    for (char c = str[i]; c != '\''; c = str[++i])
+                        if (c == '\n') lines++;
+                        else if (c == '\\') i++;
+
+                    push(
+                        TokenKind::identifier,
+                        { str + start, i - start }
+                    );
+
+                    line += lines;
+                    eats(i - start + 1);
+                }
+                //numbers
+                else if (isNum(c))
+                {
+                    size_t start = index;
+                    size_t i = start;
+
+                    while (isNumChar(str[i])) i++;
+
+                    push(TokenKind::number, { str + start, i - start });
+
+                    eats(i - start); //nom nom
+                }
+                //keywords or identifiers
+                else if (isIdent(c))
+                {
+                    size_t start = index;
+                    size_t i = start;
+
+                    while (isIdent(str[i])) i++;
+
+                    std::string_view value{ str + start, i - start };
+
+                    if (keywords.find(value) != keywords.end())
+                        push(TokenKind::keyword, value);
+                    else
+                        push(TokenKind::identifier, value);
+
+                    eats(i - start); //nom nom 
+                }
+                //symbols
+                else
+                {
+                    std::string_view three{ str + index, 3 };
+                    std::string_view two{ str + index, 2 };
+                    std::string_view one{ str + index, 1 };
+
+                    if (isCompound(three)) {
+                        push(TokenKind::symbol, three);
+                        eats(3);
+                    }
+                    else if (isCompound(two)) {
+                        push(TokenKind::symbol, two);
+                        eats(2);
+                    }
+                    else {
+                        push(TokenKind::symbol, one);
+                        eat();
+                    }
+                }
+            }
+
+
+
+            return { str, std::move(r) };
+        }
+
+
+        int digitValue(char c) {
+            if (isNum(c))
+                return c - '0';
+
+            if ('a' <= c && c <= 'f')
+                return 10 + (c - 'a');
+
+            if ('A' <= c && c <= 'F')
+                return 10 + (c - 'A');
+
+            return -1;
+        }
+
+        //TODO: maybe support exponential notation with 'p'
+        template<class T>
+        bool parseNum(std::string_view text, T& result) {
+            uint16_t base = 10;
+            size_t i = 0;
+
+            if (text.size() > 2 && text[0] == '0')
+                switch (std::tolower(static_cast<unsigned char>(text[1]))) {
+                case 'x': base = 16; i = 2; break;
+                case 'o': base = 8; i = 2; break;
+                case 'q': base = 4; i = 2; break;
+                case 'b': base = 2; i = 2; break;
+
+                case 'd': base = 10; i = 2; break;
+                }
+
+            T value = 0;
+            T fraction = 0;
+            T divisor = 0;
+
+            bool dot = false;
+
+            for (; i < text.size(); i++) {
+                char c = text[i];
+
+                if (c == '_') continue;
+
+                if (c == '.') {
+                    if (dot) return false;
+
+                    dot = true;
+                    continue;
+                }
+
+                int digit = digitValue(c);
+
+                if (digit < 0 || digit >= base)
+                    return false;
+
+                if (dot) {
+                    divisor *= base;
+                    fraction += static_cast<T>(digit) / divisor;
+                }
+                else
+                    value = value * base + digit;
+            }
+
+            result = value + fraction;
+            return true;
+        }
+
+    };
+
+}
+
+
+
+/*
+    Intermediate Rerpresentation
+*/
+
+namespace ir {
+
+}
+
+
+
+/*
+    IR Interpreter stack machine
+*/
+
+namespace interpreter {
+
+}
+
+
+
+/*
+    semantic tree (painful)
+*/
+
+namespace semanticTree {
+
+}
+
+
+
+/*
+    parse tree
+*/
+
+namespace parseTree {
+
+}
+
+
+
+/*
+    user
+*/
+
+int main(int argc, char** argv) {
+    std::cout << "Hello, world!\n";
+
+
+
+    tokenizer::TokenStream tokens;
+    {
+        tokenizer::Tokenizer tz{};
+
+        tokens = tz.tokenize(TEXT);
+    }
+
+    std::cout << "tokens:\n";
+    for (const auto& tok : tokens.data)
+        std::cout << tok.value << '\n';
+
+
+
+    if (WAIT_FOR_EXIT) {
+        char c;
+        std::cout << "\nenter anything to exit: ";
+        std::cin >> c;
+    }
+
+    return 0;
+}

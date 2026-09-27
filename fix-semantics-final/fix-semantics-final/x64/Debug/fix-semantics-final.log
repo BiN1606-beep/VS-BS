@@ -1,0 +1,3 @@
+﻿  fix-semantics-final.cpp
+C:\Users\vincent.staaf\OneDrive - Academedia\Documents\GitHub\VS-BS\fix-semantics-final\fix-semantics-final\fix-semantics-final.cpp(35,1): warning C4717: 'CRASH_THE_FUCKING_PROGRAM': recursive on all control paths, function will cause runtime stack overflow
+  fix-semantics-final.vcxproj -> C:\Users\vincent.staaf\OneDrive - Academedia\Documents\GitHub\VS-BS\fix-semantics-final\x64\Debug\fix-semantics-final.exe

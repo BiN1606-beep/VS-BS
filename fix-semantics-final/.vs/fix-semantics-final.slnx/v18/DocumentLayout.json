@@ -1,0 +1,45 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\vincent.staaf\\OneDrive - Academedia\\Documents\\GitHub\\VS-BS\\fix-semantics-final\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{B9B9B7BD-F9AF-43BB-AA02-4F7E2B67D270}|fix-semantics-final\\fix-semantics-final.vcxproj|C:\\Users\\vincent.staaf\\OneDrive - Academedia\\Documents\\GitHub\\VS-BS\\fix-semantics-final\\fix-semantics-final\\fix-semantics-final.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{B9B9B7BD-F9AF-43BB-AA02-4F7E2B67D270}|fix-semantics-final\\fix-semantics-final.vcxproj|solutionrelative:fix-semantics-final\\fix-semantics-final.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 2,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{75188d03-9892-4ae2-abf1-207126247ce5}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "fix-semantics-final.cpp",
+              "DocumentMoniker": "C:\\Users\\vincent.staaf\\OneDrive - Academedia\\Documents\\GitHub\\VS-BS\\fix-semantics-final\\fix-semantics-final\\fix-semantics-final.cpp",
+              "RelativeDocumentMoniker": "fix-semantics-final\\fix-semantics-final.cpp",
+              "ToolTip": "C:\\Users\\vincent.staaf\\OneDrive - Academedia\\Documents\\GitHub\\VS-BS\\fix-semantics-final\\fix-semantics-final\\fix-semantics-final.cpp",
+              "RelativeToolTip": "fix-semantics-final\\fix-semantics-final.cpp",
+              "ViewState": "AgIAABsCAAAAAAAAAAAqwCkCAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-09-27T09:36:14.65Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
