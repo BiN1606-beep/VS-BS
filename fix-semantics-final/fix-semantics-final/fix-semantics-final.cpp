@@ -34,7 +34,7 @@ void CRASH_THE_FUCKING_PROGRAM() {
     CRASH_THE_FUCKING_PROGRAM();
 }
 
-void doIndent(std::ostream& os, size_t indent) {
+void do_indent(std::ostream& os, size_t indent) {
     while (indent--)
         os << "  ";
 }
@@ -112,8 +112,8 @@ namespace BiN {
         virtual T peek() = 0;
         virtual T eat() = 0;
 
-        virtual U newCheckpoint() = 0;
-        virtual void gotoCheckpoint(U k) = 0;
+        virtual U new_checkpoint() = 0;
+        virtual void goto_checkpoint(U k) = 0;
 
         virtual void reset() = 0;
     };
@@ -149,11 +149,11 @@ namespace BiN {
             return T{};
         }
 
-        virtual size_t newCheckpoint() override {
+        virtual size_t new_checkpoint() override {
             return pos;
         }
 
-        virtual void gotoCheckpoint(size_t k) override {
+        virtual void goto_checkpoint(size_t k) override {
             pos = k;
         }
 
@@ -238,25 +238,25 @@ namespace tokenizer {
             "end",
         };
 
-        bool isNum(const char c) { return '0' <= c && c <= '9'; }
+        bool is_num(const char c) { return '0' <= c && c <= '9'; }
 
-        bool isIdent(const char c) {
+        bool is_ident(const char c) {
             return
                 (c == '_')
                 || ('a' <= c && c <= 'z')
                 || ('A' <= c && c <= 'Z')
-                || isNum(c)
+                || is_num(c)
                 ;
         }
 
-        bool isWS(const char c) { return std::isspace(static_cast<unsigned char>(c)); }
+        bool is_WS(const char c) { return std::isspace(static_cast<unsigned char>(c)); }
 
-        bool isCompound(std::string_view s) {
+        bool is_compound(std::string_view s) {
             return compounds.find(s) != compounds.end();
         }
 
-        bool isNumChar(const char c) {
-            return isIdent(c) || c == '.';
+        bool is_num_char(const char c) {
+            return is_ident(c) || c == '.';
         }
 
         TokenStream tokenize(const char* str) {
@@ -280,7 +280,7 @@ namespace tokenizer {
             auto skipWS = [&]()->bool {
                 char c = peek();
 
-                while (isWS(c)) {
+                while (is_WS(c)) {
                     eat();
                     if (c == '\n') {
                         line++;
@@ -356,24 +356,24 @@ namespace tokenizer {
                     eats(i - start + 1);
                 }
                 //numbers
-                else if (isNum(c))
+                else if (is_num(c))
                 {
                     size_t start = index;
                     size_t i = start;
 
-                    while (isNumChar(str[i])) i++;
+                    while (is_num_char(str[i])) i++;
 
                     push(TokenKind::number, { str + start, i - start });
 
                     eats(i - start); //nom nom
                 }
                 //keywords or identifiers
-                else if (isIdent(c))
+                else if (is_ident(c))
                 {
                     size_t start = index;
                     size_t i = start;
 
-                    while (isIdent(str[i])) i++;
+                    while (is_ident(str[i])) i++;
 
                     std::string_view value{ str + start, i - start };
 
@@ -391,11 +391,11 @@ namespace tokenizer {
                     std::string_view two{ str + index, 2 };
                     std::string_view one{ str + index, 1 };
 
-                    if (isCompound(three)) {
+                    if (is_compound(three)) {
                         push(TokenKind::symbol, three);
                         eats(3);
                     }
-                    else if (isCompound(two)) {
+                    else if (is_compound(two)) {
                         push(TokenKind::symbol, two);
                         eats(2);
                     }
@@ -413,7 +413,7 @@ namespace tokenizer {
 
 
         int digitValue(char c) {
-            if (isNum(c))
+            if (is_num(c))
                 return c - '0';
 
             if ('a' <= c && c <= 'f')
@@ -427,7 +427,7 @@ namespace tokenizer {
 
         //TODO: maybe support exponential notation with 'p'
         template<class T>
-        bool parseNum(std::string_view text, T& result) {
+        bool parse_num(std::string_view text, T& result) {
             uint16_t base = 10;
             size_t i = 0;
 
@@ -508,6 +508,31 @@ namespace interpreter {
 
 namespace semanticTree {
 
+    class Name {
+    public:
+        std::vector<std::string_view> path;
+        std::vector<tokenizer::Token> args;
+    };
+
+
+
+    class Node {
+        virtual ~Node() = default;
+
+        virtual void print(std::ostream& os, size_t indent = 0) const {
+            do_indent(os, indent);
+            os << "node\n";
+        }
+
+        virtual void emitIR() {} //change to ir::Node
+    };
+
+
+
+    class SemanticState {
+        //TODO!
+    };
+
 }
 
 
@@ -517,6 +542,144 @@ namespace semanticTree {
 */
 
 namespace parseTree {
+
+    struct Error {
+        tokenizer::Token token;
+        std::string message;
+
+        Error(tokenizer::Token tok, std::string msg)
+            : token(std::move(tok)), message(std::move(msg))
+        {
+        }
+
+        void print(std::ostream& os, size_t indent = 0) const {
+            do_indent(os, indent);
+            os
+                << token.line
+                << ":"
+                << token.col
+                << ": "
+                << message
+                << ": "
+                << token.value
+                << "\n";
+        }
+    };
+
+
+
+    class Node {
+    public:
+        virtual ~Node() = default;
+
+        virtual void print(std::ostream& os, size_t indent = 0) const {
+            do_indent(os, indent);
+            os << "node\n";
+        }
+    };
+
+
+
+    class Parser;
+    class Expr;
+
+
+
+    class NameNode : public Node {
+        std::vector<tokenizer::Token> path;
+        
+    public:
+        void print(std::ostream& os, size_t indent = 0) const override {
+            do_indent(os, indent);
+            bool first = true;
+            for (const auto& tok : path) {
+                if (!first) os << "::";
+                first = false;
+                os << tok.value;
+            }
+            os << "\n";
+        }
+
+    };
+
+
+
+    class NumberNode : public Node {
+    public:
+        std::string_view value;
+        bool isAuto = false;
+
+        virtual void print(std::ostream& os, size_t indent = 0) const {
+            do_indent(os, indent);
+
+            if (isAuto)
+                os << "auto";
+            else
+                os << value;
+        }
+    };
+
+
+
+    class TypeNode : public Node {
+
+    };
+
+    class InvalidType : public TypeNode {
+
+    };
+
+    class IdentifierType : public TypeNode {
+    public:
+        std::unique_ptr<NameNode> name;
+
+        IdentifierType(std::unique_ptr<NameNode> name)
+            : name(std::move(name))
+        {
+        }
+
+        void print(std::ostream& os, size_t indent = 0) const override {
+            name->print(os, indent);
+        }
+    };
+
+
+
+    class Expr : public Node {
+    public:
+        virtual std::unique_ptr<semanticTree::Node> semanticCheck(semanticTree::SemanticState& semantix) = 0;
+
+        virtual void preCheck(semanticTree::SemanticState& semantix) {
+            //actually do nothing
+        }
+    };
+
+    class InvalidExpr : public Expr {
+
+    };
+
+    class VoidExpr : public Expr {
+    public:
+        void print(std::ostream& os, size_t indent = 0) const override {
+            do_indent(os, indent);
+            os << "void\n";
+        }
+    };
+
+    class IdentifierExpr : public Expr {
+    public:
+        std::unique_ptr<NameNode> name;
+        IdentifierExpr(std::unique_ptr<NameNode> n)
+            : name(std::move(n))
+        {
+        }
+
+        void print(std::ostream& os, size_t indent = 0) const override {
+            do_indent(os, indent);
+            os << "identifier: ";
+            name->print(os);
+        }
+    };
 
 }
 

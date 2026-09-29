@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="fix-semantics-final/fix-semantics-final.vcxproj" />
+  <Project Path="fix-semantics-final/fix-semantics-final.vcxproj" Id="b9b9b7bd-f9af-43bb-aa02-4f7e2b67d270" />
 </Solution>
