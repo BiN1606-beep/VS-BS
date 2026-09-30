@@ -506,12 +506,29 @@ namespace interpreter {
     semantic tree (painful)
 */
 
+namespace parseTree {
+    class Expr;
+}
+
+
+
 namespace semanticTree {
+
+    struct Error {
+        const parseTree::Expr* expr;
+        std::string_view message;
+    };
+
+
 
     class Name {
     public:
         std::vector<std::string_view> path;
         std::vector<tokenizer::Token> args;
+
+        bool operator==(const Name& other) const {
+            return path == other.path;
+        }
     };
 
 
@@ -682,6 +699,26 @@ namespace parseTree {
     };
 
 }
+
+
+
+// straight from ChatGPT
+template<>
+struct std::hash<semanticTree::Name> {
+    std::size_t operator()(const semanticTree::Name& name) const noexcept {
+        std::size_t seed = 0;
+
+        for (const auto& part : name.path) {
+            // Hash the string_view
+            std::size_t h = std::hash<std::string_view>{}(part);
+
+            // Combine it into seed
+            seed ^= h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+
+        return seed;
+    }
+};
 
 
 
