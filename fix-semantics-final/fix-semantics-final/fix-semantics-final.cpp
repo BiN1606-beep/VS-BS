@@ -530,24 +530,130 @@ namespace semanticTree {
             return path == other.path;
         }
     };
+}
+
+// straight from ChatGPT
+template<>
+struct std::hash<semanticTree::Name> {
+    std::size_t operator()(const semanticTree::Name& name) const noexcept {
+        std::size_t seed = 0;
+
+        for (const auto& part : name.path) {
+            // Hash the string_view
+            std::size_t h = std::hash<std::string_view>{}(part);
+
+            // Combine it into seed
+            seed ^= h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
+
+        return seed;
+    }
+};
+
+namespace semanticTree {
 
 
 
-    class Node {
-        virtual ~Node() = default;
+    class ExprNode;
+    class SemanticState;
+
+    struct OperatorInfo {
+        using PrefixCheck = std::unique_ptr<ExprNode>(*)(SemanticState&, parseTree::Expr&);
+        using SuffixCheck = std::unique_ptr<ExprNode>(*)(SemanticState&, parseTree::Expr&);
+        using BinaryCheck = std::unique_ptr<ExprNode>(*)(SemanticState&, parseTree::Expr&, parseTree::Expr&);
+
+        std::unordered_map<std::string_view, PrefixCheck> prefix_operators;
+        std::unordered_map<std::string_view, SuffixCheck> suffix_operators;
+        std::unordered_map<std::string_view, BinaryCheck> binary_operators;
+
+        std::unordered_map<std::string_view, void(*)()> other_operators;
+    };
+
+
+
+    struct TypeInfo {
+    public:
+
+        virtual bool equals(TypeInfo& other) {
+            return false;
+        };
+
+        bool operator==(TypeInfo& other) {
+            return equals(other);
+        }
+
+        OperatorInfo operators;
+
+    };
+
+
+
+    class ExprNode {
+    public:
+        virtual ~ExprNode() = default;
 
         virtual void print(std::ostream& os, size_t indent = 0) const {
             do_indent(os, indent);
             os << "node\n";
         }
 
-        virtual void emitIR() {} //change to ir::Node
+        std::unique_ptr<TypeInfo> type_info;
+        OperatorInfo operators;
+
+        virtual void emit_IR() {} //TODO! change to virtual ir::Node emit_IR() = 0;
+    };
+
+
+
+    struct ExprDeclaration {
+        void(*pre_check)(SemanticState&);
+        std::unique_ptr<ExprNode>(*semantics)(SemanticState&);
     };
 
 
 
     class SemanticState {
-        //TODO!
+    private:
+        std::vector<Error> errors{};
+
+        struct Scope {
+
+            std::unordered_map<
+                Name,
+                ExprDeclaration
+            > exprNames{};
+
+            std::unordered_map<
+                Name,
+                std::unique_ptr<TypeInfo>
+            > typeNames{};
+
+        };
+
+        std::vector<Scope> scopes{};
+
+    public:
+
+        void addError(Error e) {
+            errors.emplace_back(e);
+        }
+
+        void addError(const parseTree::Expr* expr, std::string_view str) {
+            errors.emplace_back(Error{
+                .expr = expr,
+                .message = str,
+            });
+        }
+
+
+
+        void pushScope() {
+            scopes.emplace_back(Scope{});
+        } void popScope() {
+            scopes.pop_back();
+        }
+
+
     };
 
 }
@@ -664,9 +770,9 @@ namespace parseTree {
 
     class Expr : public Node {
     public:
-        virtual std::unique_ptr<semanticTree::Node> semanticCheck(semanticTree::SemanticState& semantix) = 0;
+        virtual std::unique_ptr<semanticTree::ExprNode> semantics(semanticTree::SemanticState& semantix) = 0;
 
-        virtual void preCheck(semanticTree::SemanticState& semantix) {
+        virtual void pre_check(semanticTree::SemanticState& semantix) {
             //actually do nothing
         }
     };
@@ -699,26 +805,6 @@ namespace parseTree {
     };
 
 }
-
-
-
-// straight from ChatGPT
-template<>
-struct std::hash<semanticTree::Name> {
-    std::size_t operator()(const semanticTree::Name& name) const noexcept {
-        std::size_t seed = 0;
-
-        for (const auto& part : name.path) {
-            // Hash the string_view
-            std::size_t h = std::hash<std::string_view>{}(part);
-
-            // Combine it into seed
-            seed ^= h + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        }
-
-        return seed;
-    }
-};
 
 
 
