@@ -162,6 +162,18 @@ namespace BiN {
         }
     };
 
+
+
+    template <class T>
+    class UniqueFieldThing {
+    private:
+        size_t next_key = 0;
+
+    public:
+        std::unordered_map<size_t, std::unique_ptr<T>> data{};
+
+    };
+
 }
 
 
@@ -514,13 +526,6 @@ namespace parseTree {
 
 namespace semanticTree {
 
-    struct Error {
-        const parseTree::Expr* expr;
-        std::string_view message;
-    };
-
-
-
     class Name {
     public:
         std::vector<std::string_view> path;
@@ -530,6 +535,7 @@ namespace semanticTree {
             return path == other.path;
         }
     };
+
 }
 
 // straight from ChatGPT
@@ -551,6 +557,13 @@ struct std::hash<semanticTree::Name> {
 };
 
 namespace semanticTree {
+
+
+
+    struct Error {
+        const parseTree::Expr* expr;
+        std::string_view message;
+    };
 
 
 
@@ -617,6 +630,11 @@ namespace semanticTree {
         std::vector<Error> errors{};
 
         struct Scope {
+            Scope() = default;
+            Scope(const Scope&) = delete;
+            Scope& operator=(const Scope&) = delete;
+            Scope(Scope&&) = default;
+            Scope& operator=(Scope&&) = default;
 
             std::unordered_map<
                 Name,
@@ -643,14 +661,6 @@ namespace semanticTree {
                 .expr = expr,
                 .message = str,
             });
-        }
-
-
-
-        void pushScope() {
-            scopes.emplace_back(Scope{});
-        } void popScope() {
-            scopes.pop_back();
         }
 
 
